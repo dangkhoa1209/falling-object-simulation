@@ -5,13 +5,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mô phỏng vật rơi</title>
     <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; margin: 20px; }
-        input { margin: 5px; }
-        canvas { border: 1px solid #000; display: block; margin-top: 20px; }
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+        }
+        input, button {
+            margin: 5px 0;
+            padding: 8px;
+            font-size: 16px;
+        }
+        canvas {
+            border: 1px solid #000;
+            display: block;
+            margin-top: 20px;
+            width: 100%; /* Chiều rộng tối đa */
+            /* height: 100vh;  */
+            /* Chiều cao tối đa */
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.2);
+            padding: 5px;
+            box-sizing: border-box;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+        .results p {
+            margin: 5px 0;
+            font-size: 18px;
+        }
+        .highlight {
+            font-weight: bold;
+            color: #007BFF;
+        }
     </style>
 </head>
 <body>
-    <h1>Mô phỏng vật rơi có tác dụng của lực cản không khí và lực gió đẩy </h1>
+    <h1>Mô phỏng vật rơi có tác dụng của lực cản không khí và lực gió đẩy</h1>
     <label for="radius">Bán kính vật (m):</label>
     <input type="number" id="radius" step="0.1" value="0.5"><br>
 
@@ -19,18 +50,23 @@
     <input type="number" id="mass" step="5" value="10"><br>
 
     <label for="height">Độ cao ban đầu (m):</label>
-    <input type="number" id="height" step="1" value="20"><br>
+    <input type="number" id="height" step="1" value="50"><br>
 
     <label for="windSpeed">Tốc độ gió (m/s):</label>
-    <input type="number" id="windSpeed" step="1" value="50"><br>
+    <input type="number" id="windSpeed" step="1" value="10"><br>
 
     <button onclick="simulateFall()">Bắt đầu mô phỏng</button>
 
-    <canvas id="simulationCanvas" width="800" height="400"></canvas>
+    <canvas id="simulationCanvas"></canvas>
+
+    <div class="results">
+        <p>Thời gian vật rơi: <span id="time" class="highlight">0.00</span> giây</p>
+        <p>Khoảng cách vật bị lực gió đẩy đi: <span id="posX" class="highlight">0.00</span> m</p>
+        <p>Khoảng cách vật với mặt đất: <span id="posY" class="highlight">0.00</span> m</p>
+    </div>
 
     <script>
         function simulateFall() {
-            // Lấy tham chiếu đến canvas và context vẽ
             const canvas = document.getElementById('simulationCanvas');
             const ctx = canvas.getContext('2d');
 
@@ -47,18 +83,31 @@
             const A = Math.PI * r * r; // Diện tích mặt cắt ngang của vật (m^2) - Công thức diện tích hình tròn
 
             // Khởi tạo vị trí và vận tốc ban đầu
-            let x = 50; // Vị trí x ban đầu trên canvas (pixel)
+            // Vật sẽ bắt đầu rơi tại x = độ cao ban đầu, y = 0, sau đó x giảm dần, y tăng dần, tg rơi tăng dần
+            // chiều cao (x) = độ cao ban đầu rơi của vật
+            // chiều rộng (y) = tốc độ gió * 10
+            let x = 0; // Vị trí x ban đầu (m)
             let y = h; // Vị trí y ban đầu (m) - tương ứng với độ cao
-
-            let vy = 0; // Vận tốc theo phương y (dọc) ban đầu (m/s)
             let vx = 0; // Vận tốc theo phương x (ngang) ban đầu (m/s)
+            let vy = 0; // Vận tốc theo phương y (dọc) ban đầu (m/s)
 
             const dt = 0.01; // Bước thời gian (giây) - Độ chính xác của mô phỏng
             let t = 0; // Thời gian đã trôi qua (giây)
             let animation; // Biến để lưu trữ ID của animation frame
 
+            // Tỷ lệ chuyển đổi từ đơn vị thực tế sang pixel trên canvas
+            const canvasWidth = canvas.width; // Chiều rộng canvas
+            const canvasHeight = canvas.height; // Chiều cao canvas
+            const scaleX = canvasWidth / (windSpeed * 10); // Tỷ lệ cho trục x
+            const scaleY = canvasHeight / h; // Tỷ lệ cho trục y
+
+            // DOM các thành phần hiển thị kết quả
+            const timeDisplay = document.getElementById('time');
+            const posXDisplay = document.getElementById('posX');
+            const posYDisplay = document.getElementById('posY');
+
             function draw() {
-                // Tính vận tốc tổng hợp (độ lớn của vector vận tốc) - Định lý Pytago
+                // Tính vận tốc tổng hợp (độ lớn của vector vận tốc)
                 const v = Math.sqrt(vx * vx + vy * vy);
 
                 // Tính lực cản không khí - Công thức Fd = 0.5 * rho * Cd * A * v^2
@@ -67,37 +116,42 @@
                 // Phân tích lực cản thành hai thành phần theo trục x và y
                 const Fdx = (v === 0) ? 0 : Fd * (vx / v); // Thành phần lực cản theo x
                 const Fdy = (v === 0) ? 0 : Fd * (vy / v); // Thành phần lực cản theo y
-                // Sử dụng toán tử 3 ngôi để tránh lỗi chia cho 0 khi v = 0
 
-                // Tính lực gió - Công thức tương tự lực cản, giả sử gió thổi vuông góc với A
+                // Tính lực gió - Công thức tương tự lực cản
                 const Fwind = 0.5 * rho * A * windSpeed * windSpeed;
                 const Fwindx = Fwind; // Gió thổi hoàn toàn theo phương ngang
 
                 // Cập nhật vận tốc theo định luật II Newton (F = ma => a = F/m)
-                vx -= (Fdx / m) * dt - (Fwindx / m) * dt; // Cập nhật vx, trừ lực cản và lực gió (vì cùng chiều chuyển động)
-                vy += (g - (Fdy / m)) * dt; // Cập nhật vy, cộng gia tốc trọng trường, trừ gia tốc do lực cản
+                vx -= (Fdx / m) * dt - (Fwindx / m) * dt; // Cập nhật vx
+                vy += (g - (Fdy / m)) * dt; // Cập nhật vy
 
                 // Cập nhật vị trí
-                x += vx * dt; // Vị trí x mới = vị trí x cũ + quãng đường đi được theo x
-                y -= vy * dt; // Vị trí y mới = vị trí y cũ - quãng đường đi được theo y (y giảm khi vật rơi xuống)
+                x += vx * dt; // Vị trí x mới
+                y -= vy * dt; // Vị trí y mới
 
-                ctx.clearRect(0, 0, canvas.width, canvas.height); // Xóa canvas để vẽ lại
+                ctx.clearRect(0, 0, canvasWidth, canvasHeight); // Xóa canvas để vẽ lại
 
-                // Tính toán vị trí Y trên canvas dựa trên tỉ lệ so với chiều cao ban đầu
-                const canvasY = canvas.height - (y / h) * canvas.height; // Đảo ngược trục y của canvas
+                // Chuyển đổi vị trí thực tế sang tọa độ trên canvas
+                const canvasX = x * scaleX;
+                const canvasY = canvasHeight - y * scaleY;
 
                 // Vẽ vật thể (hình tròn)
-                ctx.beginPath(); // Bắt đầu đường vẽ mới
-                ctx.arc(x, canvasY, r * (canvas.height / h), 0, 2 * Math.PI); // Vẽ hình tròn, bán kính được scale theo chiều cao
-                ctx.fillStyle = 'blue'; // Màu xanh dương
-                ctx.fill(); // Tô màu hình tròn
-                ctx.stroke(); // Vẽ đường viền hình tròn
+                ctx.beginPath();
+                ctx.arc(canvasX, canvasY, r * scaleY, 0, 2 * Math.PI);
+                ctx.fillStyle = 'blue';
+                ctx.fill();
+                ctx.stroke();
 
-                // Kiểm tra va chạm với mặt đất (y <= r)
+                // Cập nhật thông tin hiển thị kết quả
+                timeDisplay.textContent = t.toFixed(2);
+                posXDisplay.textContent = x.toFixed(2);
+                posYDisplay.textContent = y.toFixed(2);
+
+                // Kiểm tra va chạm với mặt đất
                 if (y <= r) {
+                    posYDisplay.textContent = 0;
                     cancelAnimationFrame(animation); // Dừng animation
-                    alert(`Vật đã chạm đất sau ${t.toFixed(2)} giây!`); // Hiển thị thông báo
-                    return; // Kết thúc hàm draw
+                    return;
                 }
 
                 t += dt; // Cập nhật thời gian
